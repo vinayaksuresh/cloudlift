@@ -13,3 +13,4 @@ metastore_db/
 *.spec
 __pycache__
 junit-*.xml
+junit_*.xml
