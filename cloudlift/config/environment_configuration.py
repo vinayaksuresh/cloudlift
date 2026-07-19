@@ -3,7 +3,7 @@ This module handles global cloudlift configuration that is custom to
 the organization using cloudlift
 """
 import ipaddress
-from distutils.version import LooseVersion
+from packaging.version import parse as LooseVersion
 
 import boto3
 import dictdiffer

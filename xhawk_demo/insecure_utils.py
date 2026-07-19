@@ -1,21 +1,23 @@
 import os
+import shlex
 import subprocess
 
 
-# Hardcoded credentials committed to source control.
-DB_PASSWORD = "SuperSecret123!"
-AWS_SECRET_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE"
+# Credentials are injected via environment variables.
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
 
 def run_user_command(user_input):
-    # Passes untrusted input straight to a shell.
-    return subprocess.call(user_input, shell=True)
+    args = shlex.split(user_input)
+    if not args or args[0] != "status":
+        raise ValueError("unsupported command")
+    return subprocess.call(args, shell=False)
 
 
 def get_user(db, user_id):
-    # SQL built via string interpolation.
-    query = "SELECT * FROM users WHERE id = '%s'" % user_id
-    return db.execute(query)
+    query = "SELECT * FROM users WHERE id = ?"
+    return db.execute(query, (user_id,))
 
 
 def read_config(path):
