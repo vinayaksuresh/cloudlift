@@ -16,7 +16,7 @@ setup(
     version=VERSION,
     packages=find_packages(),
     install_requires=requirements,
-    description="Cloudlift makes it easier to launch dockerized services in AWS ECS",
+    description="Cloudlift deploys dockerized services to AWS ECS and GCP Cloud Run",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/GetSimpl/cloudlift",

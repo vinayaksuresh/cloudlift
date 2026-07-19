@@ -5,15 +5,6 @@ import pytest
 from moto import mock_aws as moto_mock_aws
 
 
-def pytest_addoption(parser):
-    parser.addoption(
-        "--keep-resources",
-        action="store_true",
-        default=False,
-        help="my option: type1 or type2",
-    )
-
-
 @pytest.fixture
 def keep_resources(request):
     """

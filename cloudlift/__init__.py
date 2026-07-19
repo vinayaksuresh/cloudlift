@@ -13,9 +13,11 @@ from cloudlift.deployment.service_creator import ServiceCreator
 from cloudlift.deployment.service_information_fetcher import ServiceInformationFetcher
 from cloudlift.deployment.service_updater import ServiceUpdater
 from cloudlift.deployment.task_definition_creator import TaskDefinitionCreator
+from cloudlift.gcp import CloudRunServiceUpdater, GcpEnvironmentConfiguration, GcpSecretManagerStore
 from cloudlift.session import SessionCreator
 from cloudlift.version import VERSION
 from cloudlift.exceptions import UnrecoverableException
+
 
 def _require_environment(func):
     @click.option('--environment', '-e', prompt='environment',
@@ -42,6 +44,21 @@ repo')
     return wrapper
 
 
+def _require_aws_credentials(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            boto3.client('cloudformation')
+        except ClientError:
+            log_err("Could not connect to AWS!")
+            log_err("Ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY & \
+AWS_DEFAULT_REGION env vars are set OR run 'aws configure'")
+            exit(1)
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 class CommandWrapper(click.Group):
     def __call__(self, *args, **kwargs):
         try:
@@ -55,20 +72,14 @@ class CommandWrapper(click.Group):
 @click.version_option(version=VERSION, prog_name="cloudlift")
 def cli():
     """
-        Cloudlift is built by Simpl developers to make it easier to launch \
-        dockerized services in AWS ECS.
+        Cloudlift makes it easier to launch dockerized services in AWS ECS
+        and GCP Cloud Run.
     """
-    try:
-        boto3.client('cloudformation')
-    except ClientError:
-        log_err("Could not connect to AWS!")
-        log_err("Ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY & \
-AWS_DEFAULT_REGION env vars are set OR run 'aws configure'")
-        exit(1)
 
 
 @cli.command(help="Create a new service. This can contain multiple \
 ECS services")
+@_require_aws_credentials
 @_require_environment
 @_require_name
 def create_service(name, environment):
@@ -77,6 +88,7 @@ def create_service(name, environment):
 
 
 @cli.command(help="Update existing service.")
+@_require_aws_credentials
 @_require_environment
 @_require_name
 def update_service(name, environment):
@@ -85,6 +97,7 @@ def update_service(name, environment):
 
 
 @cli.command(help="Create a new environment")
+@_require_aws_credentials
 @click.option('--environment', '-e', prompt='environment',
               help='environment')
 def create_environment(environment):
@@ -92,6 +105,7 @@ def create_environment(environment):
 
 
 @cli.command(help="Update environment")
+@_require_aws_credentials
 @_require_environment
 @click.option('--update_ecs_agents',
               is_flag=True,
@@ -102,6 +116,7 @@ def update_environment(environment, update_ecs_agents):
 
 @cli.command(help="Command used to create or update the configuration \
 in parameter store")
+@_require_aws_credentials
 @_require_name
 @_require_environment
 def edit_config(name, environment):
@@ -109,6 +124,7 @@ def edit_config(name, environment):
 
 
 @cli.command()
+@_require_aws_credentials
 @_require_environment
 @_require_name
 @click.option('--version', default=None,
@@ -121,6 +137,7 @@ def deploy_service(name, environment, version, build_arg):
 
 
 @cli.command()
+@_require_aws_credentials
 @_require_environment
 @_require_name
 @click.option('--version', default=None,
@@ -133,6 +150,7 @@ def create_task_definition(name, environment, version, build_arg):
 
 
 @cli.command()
+@_require_aws_credentials
 @_require_environment
 @_require_name
 @click.option('--version', default=None,
@@ -145,6 +163,7 @@ def update_task_definition(name, environment, version, build_arg):
 
 
 @cli.command()
+@_require_aws_credentials
 @click.option('--local_tag', help='Commit sha for image to be uploaded')
 @click.option('--additional_tags', default=[], multiple=True,
               help='Additional tags for the image apart from commit SHA')
@@ -155,6 +174,7 @@ def upload_to_ecr(name, local_tag, additional_tags):
 
 @cli.command(help="Get commit information of currently deployed code \
 from commit hash")
+@_require_aws_credentials
 @_require_environment
 @_require_name
 @click.option('--short', '-s', is_flag=True,
@@ -165,12 +185,58 @@ def get_version(name, environment, short):
 
 @cli.command(help="Start SSH session in instance running a current \
 service task")
+@_require_aws_credentials
 @_require_environment
 @_require_name
 @click.option('--mfa', help='MFA code')
 @click.option('--component', help='nested service name')
 def start_session(name, environment, mfa, component):
     SessionCreator(name, environment).start_session(mfa, component)
+
+
+@cli.command(name='gcp_create_environment', help="Create or replace local GCP Cloud Run environment configuration")
+@click.option('--environment', '-e', prompt='environment', help='environment')
+@click.option('--project-id', prompt='GCP project ID', help='GCP project ID')
+@click.option('--region', default='us-central1', show_default=True, help='Cloud Run region')
+@click.option('--artifact-registry-location', default=None,
+              help='Artifact Registry location. Defaults to --region.')
+@click.option('--artifact-registry-repository', prompt='Artifact Registry repository',
+              help='Artifact Registry Docker repository')
+@click.option('--service-account', default=None, help='Optional Cloud Run service account email')
+@click.option('--vpc-connector', default=None, help='Optional Cloud Run VPC connector resource')
+@click.option('--ingress', default='INGRESS_TRAFFIC_ALL', show_default=True,
+              help='Cloud Run ingress setting')
+def gcp_create_environment(environment, project_id, region, artifact_registry_location,
+                           artifact_registry_repository, service_account,
+                           vpc_connector, ingress):
+    GcpEnvironmentConfiguration(environment).create_config(
+        project_id=project_id,
+        region=region,
+        artifact_registry_location=artifact_registry_location or region,
+        artifact_registry_repository=artifact_registry_repository,
+        service_account=service_account,
+        vpc_connector=vpc_connector,
+        ingress=ingress,
+    )
+
+
+@cli.command(name='gcp_edit_config', help="Create or update service configuration in GCP Secret Manager")
+@_require_name
+@click.option('--environment', '-e', prompt='environment', help='environment')
+def gcp_edit_config(name, environment):
+    environment_config = GcpEnvironmentConfiguration(environment).get_config()
+    GcpSecretManagerStore(name, environment, environment_config['project_id']).edit_config()
+
+
+@cli.command(name='gcp_deploy_service', help="Build, push, and deploy a service to GCP Cloud Run")
+@_require_name
+@click.option('--environment', '-e', prompt='environment', help='environment')
+@click.option('--version', default=None, help='local image version tag')
+@click.option("--build-arg", type=(str, str), multiple=True, help="These args are passed to docker build command "
+                                                                  "as --build-args. Supports multiple.\
+                                                                   Please leave space between name and value" )
+def gcp_deploy_service(name, environment, version, build_arg):
+    CloudRunServiceUpdater(name, environment, None, version, dict(build_arg)).run()
 
 
 if __name__ == '__main__':

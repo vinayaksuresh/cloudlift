@@ -1,13 +1,13 @@
 # Cloudlift
 
 Cloudlift is built by Simpl developers to make it easier to launch dockerized
-services in AWS ECS.
+services in AWS ECS and GCP Cloud Run.
 
 Cloudlift is a command-line tool for dockerized services to be deployed in AWS
-ECS. It's very simple to use. That's possible because this is heavily
-opinionated. Under the hood, it is a wrapper to AWS cloudformation templates. On
-creating/updating a service or a cluster this creates/updates a cloudformation
-in AWS.
+ECS or GCP Cloud Run. It's very simple to use. That's possible because this is
+heavily opinionated. The AWS path wraps AWS CloudFormation templates for ECS
+services and clusters. The GCP path targets Cloud Run revisions backed by
+Artifact Registry images and Secret Manager environment variables.
 
 ## Demo videos
 
@@ -71,6 +71,51 @@ export AWS_DEFAULT_PROFILE=<profile name>
 cloudlift <command>
 cloudlift <command>
 ```
+
+### 4. Configure GCP for Cloud Run
+
+The GCP workflow is separate from the AWS ECS workflow. It deploys to Cloud Run,
+pushes images to Artifact Registry, and maps service configuration from Secret
+Manager. It does not create GKE clusters, Compute Engine instance groups, or
+CloudFormation-equivalent infrastructure.
+
+Before running GCP commands, prepare a GCP project with:
+
+- Application Default Credentials or service-account credentials available to the
+  Google SDK.
+- Cloud Run, Artifact Registry, and Secret Manager APIs enabled.
+- An Artifact Registry Docker repository already created in the target location.
+- Docker or Podman and `gcloud` available locally for image build, authentication,
+  and push.
+
+Create or replace local Cloudlift GCP environment configuration:
+
+```sh
+cloudlift gcp_create_environment \
+  -e <environment-name> \
+  --project-id <gcp-project-id> \
+  --region <cloud-run-region> \
+  --artifact-registry-location <artifact-registry-location> \
+  --artifact-registry-repository <docker-repository>
+```
+
+Create or update service secrets in GCP Secret Manager. The command opens your
+editor with `KEY=value` pairs and stores values as Secret Manager versions:
+
+```sh
+cloudlift gcp_edit_config -e <environment-name> --name <service-name>
+```
+
+Deploy from a service directory containing `env.sample`:
+
+```sh
+cloudlift gcp_deploy_service -e <environment-name> --name <service-name> --version <tag>
+```
+
+Cloudlift builds and pushes
+`<location>-docker.pkg.dev/<project>/<repository>/<service>:<tag>`, then deploys
+a Cloud Run revision using Secret Manager-backed environment variables. GCP
+commands do not require AWS credentials.
 
 ## Usage
 
