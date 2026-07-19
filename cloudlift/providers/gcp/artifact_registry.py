@@ -6,8 +6,16 @@ class ArtifactRegistryClient(object):
         self.config = config
 
     def image_uri(self, service_name, version):
+        location = self.config.location
+        location_parts = location.rsplit("-", 1)
+        if len(location_parts) == 2 and location_parts[1].isalpha() and len(location_parts[1]) == 1:
+            raise ValueError(
+                "Artifact Registry location must be regional or multi-regional, not zonal: {}".format(
+                    location
+                )
+            )
         return "{}-docker.pkg.dev/{}/{}/{}:{}".format(
-            self.config.location,
+            location,
             self.config.project_id,
             self.config.artifact_registry_repository,
             service_name,

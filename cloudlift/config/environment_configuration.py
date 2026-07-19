@@ -3,7 +3,7 @@ This module handles global cloudlift configuration that is custom to
 the organization using cloudlift
 """
 import ipaddress
-from distutils.version import LooseVersion
+from packaging.version import Version
 
 import boto3
 import dictdiffer
@@ -57,7 +57,7 @@ class EnvironmentConfiguration(object):
             existing_configuration = configuration_response['Item']['configuration']
             previous_cloudlift_version = existing_configuration.pop("cloudlift_version", None)
             # print(f"Previous cloudlift version in environment config is {previous_cloudlift_version}")
-            if previous_cloudlift_version and LooseVersion(cloudlift_version) < LooseVersion(previous_cloudlift_version):
+            if previous_cloudlift_version and Version(cloudlift_version) < Version(previous_cloudlift_version):
                 raise UnrecoverableException(f'Cloudlift Version {previous_cloudlift_version} was used to '
                                              f'create this environment. You are using version {cloudlift_version}, '
                                              f'which is older and can cause corruption. Please upgrade to at least '
