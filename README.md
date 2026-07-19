@@ -1,13 +1,13 @@
 # Cloudlift
 
 Cloudlift is built by Simpl developers to make it easier to launch dockerized
-services in AWS ECS.
+services in AWS ECS and GCP Cloud Run.
 
-Cloudlift is a command-line tool for dockerized services to be deployed in AWS
-ECS. It's very simple to use. That's possible because this is heavily
-opinionated. Under the hood, it is a wrapper to AWS cloudformation templates. On
-creating/updating a service or a cluster this creates/updates a cloudformation
-in AWS.
+Cloudlift is a command-line tool for dockerized services to be deployed to AWS
+ECS or to GCP Cloud Run. The AWS path remains an opinionated wrapper around AWS
+CloudFormation templates for ECS services and clusters. The GCP path targets
+Cloud Run revisions backed by Artifact Registry images and Secret Manager
+secrets.
 
 ## Demo videos
 
@@ -73,6 +73,64 @@ cloudlift <command>
 ```
 
 ## Usage
+
+The original commands (`create_environment`, `create_service`, `edit_config`,
+`deploy_service`, and related ECS commands) operate on AWS. The GCP commands are
+registered separately as `gcp_create_environment`, `gcp_edit_config`, and
+`gcp_deploy_service` so the Cloud Run workflow does not require AWS credentials.
+
+### GCP Cloud Run workflow
+
+The GCP implementation targets Cloud Run + Artifact Registry + Secret Manager.
+It does not create GKE clusters, Compute Engine managed instance groups, or AWS
+CloudFormation-equivalent infrastructure.
+
+Prerequisites:
+
+- A GCP project already exists.
+- Application Default Credentials or service-account credentials are available
+  to the Google SDK.
+- Cloud Run, Artifact Registry, and Secret Manager APIs are enabled.
+- The Artifact Registry Docker repository already exists.
+- `gcloud` and Docker or Podman are installed for image authentication, tagging,
+  and pushing.
+
+Create or update the local Cloudlift GCP environment configuration:
+
+```sh
+cloudlift gcp_create_environment \
+  -e <environment-name> \
+  --project-id <gcp-project-id> \
+  --region <cloud-run-region> \
+  --artifact-location <artifact-registry-location> \
+  --artifact-repository <artifact-registry-repository>
+```
+
+This stores only GCP-relevant settings such as project ID, Cloud Run region,
+Artifact Registry location/repository, and optional Cloud Run defaults like
+service account, VPC connector, and ingress. By default the configuration is
+stored in `~/.cloudlift/gcp_environments.json`; set
+`CLOUDLIFT_GCP_CONFIG_FILE` to use an explicit path.
+
+Create or update service secrets in Secret Manager:
+
+```sh
+cloudlift gcp_edit_config -e <environment-name> --name <service-name>
+```
+
+Deploy a service from a directory containing `env.sample`:
+
+```sh
+cloudlift gcp_deploy_service -e <environment-name> --name <service-name> --version <tag>
+```
+
+The deploy command validates that every key in `env.sample` has a Secret Manager
+secret, builds the local container image, pushes
+`<location>-docker.pkg.dev/<project>/<repository>/<service>:<tag>`, and deploys a
+Cloud Run revision with Secret Manager-backed environment variables. The same
+`--build-arg KEY VALUE` option used by the AWS deploy flow is supported.
+
+### AWS ECS workflow
 
 ### Create a new environment
 
