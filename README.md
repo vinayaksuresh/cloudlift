@@ -1,13 +1,14 @@
 # Cloudlift
 
 Cloudlift is built by Simpl developers to make it easier to launch dockerized
-services in AWS ECS.
+services in AWS ECS and GCP Cloud Run.
 
 Cloudlift is a command-line tool for dockerized services to be deployed in AWS
-ECS. It's very simple to use. That's possible because this is heavily
-opinionated. Under the hood, it is a wrapper to AWS cloudformation templates. On
-creating/updating a service or a cluster this creates/updates a cloudformation
-in AWS.
+ECS or GCP Cloud Run. It's very simple to use. That's possible because this is
+heavily opinionated. Under the hood, the AWS path is a wrapper to AWS
+CloudFormation templates. On creating/updating an AWS service or cluster this
+creates/updates CloudFormation in AWS. The GCP path is a separate Cloud Run
+workflow backed by Artifact Registry and Secret Manager.
 
 ## Demo videos
 
@@ -55,6 +56,9 @@ aws configure
 Enter the AWS Access Key ID, AWS Secret Access Key. You can find instructions
 here on how to get Access Key ID and Secret Access Key here at
 http://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html
+
+AWS credentials are required for AWS ECS commands. GCP commands do not perform
+this AWS preflight check.
 
 #### Using AWS Profiles
 
@@ -254,6 +258,66 @@ For example, you can pass your SSH key as a build argument to docker build
 This example is bit comprehensive to show
 - it can execute shell commands with "`".
 - It's wrapped with double quotes to avoid line-breaks in SSH keys breaking the command.
+
+### GCP Cloud Run workflow
+
+Cloudlift also supports a GCP deployment path for Cloud Run services. This path
+is separate from the AWS ECS/CloudFormation workflow and targets only:
+
+- Cloud Run for service deployment
+- Artifact Registry Docker repositories for images
+- Secret Manager for environment variables
+
+It does not create or manage GKE clusters, Compute Engine managed instance
+groups, SSH/session access, or CloudFormation-equivalent infrastructure.
+
+#### GCP prerequisites
+
+Before using the GCP commands, make sure:
+
+- The GCP project already exists.
+- Application Default Credentials or service-account credentials are available
+  to the Google SDK.
+- Cloud Run, Artifact Registry, and Secret Manager APIs are enabled.
+- The Artifact Registry Docker repository in the environment configuration
+  already exists.
+
+#### 1. Create or edit a GCP environment
+
+```sh
+cloudlift gcp_create_environment -e <environment-name>
+```
+
+This stores a GCP-specific JSON configuration separately from the AWS DynamoDB
+environment configuration. The configuration includes the GCP project ID, Cloud
+Run region, Artifact Registry location/repository, and Cloud Run defaults such
+as CPU, memory, concurrency, optional service account, optional VPC connector,
+and ingress.
+
+#### 2. Create or update service secrets
+
+```sh
+cloudlift gcp_edit_config -e <environment-name> --name <service-name>
+```
+
+Cloudlift stores GCP service configuration in Secret Manager. Secret names are
+created with the `cloudlift-<environment>-<service>-<KEY>` convention and the
+Cloud Run deployment uses Secret Manager references instead of printing or
+passing secret values directly.
+
+#### 3. Deploy to Cloud Run
+
+From a service directory containing a `Dockerfile` and `env.sample`, run:
+
+```sh
+cloudlift gcp_deploy_service -e <environment-name> --name <service-name> --version <tag>
+```
+
+Cloudlift validates that each key in `env.sample` has a matching Secret Manager
+secret, builds the local Docker image, tags it as
+`<location>-docker.pkg.dev/<project>/<repository>/<service>:<tag>`, pushes it to
+Artifact Registry, and creates or updates the Cloud Run service revision. The
+same `--build-arg KEY VALUE` option used by the AWS deploy command is supported.
 
 ### 4. Starting shell on container instance for service
 
