@@ -2,13 +2,15 @@ import functools
 
 import boto3
 import click
+import dictdiffer
 from botocore.exceptions import ClientError
 
-from cloudlift.config import highlight_production, highlight_user_account_details
+from cloudlift.config import highlight_production, highlight_user_account_details, print_parameter_changes
 from cloudlift.config.pre_flight import check_stack_exists
 from cloudlift.deployment.configs import deduce_name
 from cloudlift.deployment import EnvironmentCreator, editor
-from cloudlift.config.logging import log_err
+from cloudlift.config.logging import log_err, log_warning
+from cloudlift.deployment.deployer import read_config
 from cloudlift.deployment.service_creator import ServiceCreator
 from cloudlift.deployment.service_information_fetcher import ServiceInformationFetcher
 from cloudlift.deployment.service_updater import ServiceUpdater
@@ -16,12 +18,23 @@ from cloudlift.deployment.task_definition_creator import TaskDefinitionCreator
 from cloudlift.session import SessionCreator
 from cloudlift.version import VERSION
 from cloudlift.exceptions import UnrecoverableException
+from cloudlift.gcp import CloudRunServiceUpdater, GcpEnvironmentConfiguration, GcpSecretManagerStore
+
+
+def _require_aws_connectivity():
+    try:
+        boto3.client('cloudformation')
+    except ClientError:
+        log_err("Could not connect to AWS!")
+        log_err("Ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY & AWS_DEFAULT_REGION env vars are set OR run 'aws configure'")
+        exit(1)
 
 def _require_environment(func):
     @click.option('--environment', '-e', prompt='environment',
                   help='environment')
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        _require_aws_connectivity()
         if kwargs['environment'] == 'production':
             highlight_production()
         highlight_user_account_details()
@@ -55,16 +68,9 @@ class CommandWrapper(click.Group):
 @click.version_option(version=VERSION, prog_name="cloudlift")
 def cli():
     """
-        Cloudlift is built by Simpl developers to make it easier to launch \
-        dockerized services in AWS ECS.
+        Cloudlift is built by Simpl developers to make it easier to launch
+        dockerized services in AWS ECS and GCP Cloud Run.
     """
-    try:
-        boto3.client('cloudformation')
-    except ClientError:
-        log_err("Could not connect to AWS!")
-        log_err("Ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY & \
-AWS_DEFAULT_REGION env vars are set OR run 'aws configure'")
-        exit(1)
 
 
 @cli.command(help="Create a new service. This can contain multiple \
@@ -150,7 +156,50 @@ def update_task_definition(name, environment, version, build_arg):
               help='Additional tags for the image apart from commit SHA')
 @_require_name
 def upload_to_ecr(name, local_tag, additional_tags):
+    _require_aws_connectivity()
     ServiceUpdater(name, '', '', local_tag).upload_image(additional_tags)
+
+
+@cli.command(name='gcp_create_environment', help="Create or edit a local GCP Cloud Run environment configuration")
+@click.option('--environment', '-e', prompt='environment', help='environment')
+def gcp_create_environment(environment):
+    GcpEnvironmentConfiguration(environment).update_config()
+
+
+@cli.command(name='gcp_edit_config', help="Create or update GCP Secret Manager configuration for a service")
+@click.option('--environment', '-e', prompt='environment', help='environment')
+@_require_name
+def gcp_edit_config(name, environment):
+    config = GcpEnvironmentConfiguration(environment).get_config()
+    secret_store = GcpSecretManagerStore(name, environment, config['project_id'])
+    env_config_strings = secret_store.get_existing_config_as_string()
+    edited_config_content = click.edit(str(env_config_strings))
+
+    if edited_config_content is None:
+        log_warning("No changes made, exiting.")
+        return
+
+    differences = list(dictdiffer.diff(
+        read_config(env_config_strings),
+        read_config(edited_config_content)
+    ))
+    if not differences:
+        log_warning("No changes made, exiting.")
+    else:
+        print_parameter_changes(differences)
+        if click.confirm('Do you want update the config?'):
+            secret_store.set_config(differences)
+        else:
+            log_warning("Changes aborted.")
+
+
+@cli.command(name='gcp_deploy_service', help="Deploy a service to GCP Cloud Run")
+@click.option('--environment', '-e', prompt='environment', help='environment')
+@_require_name
+@click.option('--version', default=None, help='local image version tag')
+@click.option("--build-arg", type=(str, str), multiple=True, help="These args are passed to docker build command as --build-args. Supports multiple. Please leave space between name and value")
+def gcp_deploy_service(name, environment, version, build_arg):
+    CloudRunServiceUpdater(name, environment, None, version, dict(build_arg)).run()
 
 
 @cli.command(help="Get commit information of currently deployed code \
