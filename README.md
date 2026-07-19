@@ -1,13 +1,14 @@
 # Cloudlift
 
 Cloudlift is built by Simpl developers to make it easier to launch dockerized
-services in AWS ECS.
+services in AWS ECS and GCP GKE.
 
 Cloudlift is a command-line tool for dockerized services to be deployed in AWS
-ECS. It's very simple to use. That's possible because this is heavily
-opinionated. Under the hood, it is a wrapper to AWS cloudformation templates. On
-creating/updating a service or a cluster this creates/updates a cloudformation
-in AWS.
+ECS or GCP GKE. It's very simple to use. That's possible because this is heavily
+opinionated. For AWS, it wraps AWS CloudFormation templates. On
+creating/updating a service or a cluster this creates/updates CloudFormation
+resources in AWS. For GCP, Cloudlift targets existing GKE clusters, Artifact
+Registry Docker repositories, and Secret Manager.
 
 ## Demo videos
 
@@ -71,6 +72,68 @@ export AWS_DEFAULT_PROFILE=<profile name>
 cloudlift <command>
 cloudlift <command>
 ```
+
+### 4. Configure GCP (optional)
+
+AWS remains the default provider. To target GCP, pass `--provider gcp` to the
+provider-aware commands, for example:
+
+```sh
+cloudlift create_environment --provider gcp -e staging
+cloudlift create_service --provider gcp -e staging --name dummy
+cloudlift deploy_service --provider gcp -e staging --name dummy --version <tag>
+```
+
+GCP support uses Application Default Credentials and the official Google Cloud
+Python SDKs plus the Kubernetes Python client. Configure ADC before invoking GCP
+commands:
+
+```sh
+gcloud auth application-default login
+```
+
+or set `GOOGLE_APPLICATION_CREDENTIALS` to a service account JSON file. Docker
+must already be authenticated for the target Artifact Registry Docker repository.
+
+GCP resources must already exist before using Cloudlift:
+
+- a GCP project
+- a GKE cluster
+- Kubernetes permissions for the target namespace
+- an Artifact Registry Docker repository
+- Secret Manager permissions for service configuration values
+
+Create or update the repo-local GCP environment config with:
+
+```sh
+cloudlift create_environment --provider gcp -e staging \
+  --project-id my-project \
+  --location asia-south1 \
+  --cluster-name my-cluster \
+  --namespace staging \
+  --artifact-registry-repository services
+```
+
+By default the config is written to `.cloudlift/gcp-<environment>.json`. Set
+`CLOUDLIFT_GCP_CONFIG_PATH` or pass `--config-path` to use another file. The JSON
+shape is:
+
+```json
+{
+  "project_id": "my-project",
+  "location": "asia-south1",
+  "cluster_name": "my-cluster",
+  "namespace": "staging",
+  "artifact_registry_repository": "services",
+  "service_account": "optional-kubernetes-service-account"
+}
+```
+
+`create_environment --provider gcp` validates and registers an existing GKE
+environment and ensures the Kubernetes namespace exists. It does not provision a
+GKE cluster. `upload_to_ecr --provider gcp` is retained for backward CLI
+compatibility and pushes to Artifact Registry. `start_session` remains AWS-only
+because there is no direct GKE equivalent to the current AWS SSM workflow.
 
 ## Usage
 
