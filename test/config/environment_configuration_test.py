@@ -2,6 +2,7 @@ import boto3
 from moto import mock_dynamodb2
 
 from cloudlift.config import EnvironmentConfiguration
+from cloudlift.config import environment_configuration as environment_configuration_module
 
 
 class TestEnvironmentConfiguration(object):
@@ -191,6 +192,7 @@ class TestEnvironmentConfiguration(object):
     @mock_dynamodb2
     def test_set_config(self):
         self.setup_existing_params()
+        environment_configuration_module.check_sns_topic_exists = lambda topic_name, environment: True
 
         store_object = EnvironmentConfiguration('dummy-staging')
         get_response = store_object.get_config()
@@ -203,6 +205,7 @@ class TestEnvironmentConfiguration(object):
 
         assert update_response == {
             "dummy-staging": {
+                "provider": "aws",
                 "cluster": {
                     "instance_type": "t2.large",
                     "key_name": "staging-cluster-v3",
@@ -240,3 +243,12 @@ class TestEnvironmentConfiguration(object):
                 }
             }
         }
+
+    @mock_dynamodb2
+    def test_missing_provider_is_treated_as_aws(self):
+        self.setup_existing_params()
+
+        store_object = EnvironmentConfiguration('dummy-staging')
+        response = store_object.get_config()
+
+        assert response['dummy-staging'].get('provider', 'aws') == 'aws'
