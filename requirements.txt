@@ -20,3 +20,10 @@ terminaltables==3.1.0
 troposphere==4.5.2
 awacs==2.4.0
 botocore==1.34.111
+azure-identity
+azure-mgmt-resource
+azure-mgmt-appcontainers
+azure-mgmt-containerregistry
+azure-mgmt-keyvault
+azure-keyvault-secrets
+azure-appconfiguration

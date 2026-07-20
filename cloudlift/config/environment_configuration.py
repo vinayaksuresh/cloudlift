@@ -160,7 +160,8 @@ class EnvironmentConfiguration(object):
         notifications_arn = prompt("Notification SNS ARN")
         ssl_certificate_arn = prompt("SSL certificate ARN")
         environment_configuration = {self.environment: {
-            "region": region,
+        "provider": "aws",
+        "region": region,
             "vpc": {
                 "cidr": str(vpc_cidr),
                 "nat-gateway": {
@@ -252,6 +253,7 @@ class EnvironmentConfiguration(object):
         '''
             Set configuration in DynamoDB
         '''
+        config.setdefault(self.environment, {})['provider'] = config.get(self.environment, {}).get('provider', 'aws')
         self._validate_changes(config)
         config['cloudlift_version'] = VERSION
         sns_arn = config[self.environment]['environment']['notifications_arn']
@@ -293,6 +295,10 @@ class EnvironmentConfiguration(object):
                 self.environment: {
                     "type": "object",
                     "properties": {
+                        "provider": {
+                            "type": "string",
+                            "pattern": "^(aws)$"
+                        },
                         "cluster": {
                             "type": "object",
                             "properties": {

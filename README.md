@@ -1,13 +1,14 @@
 # Cloudlift
 
 Cloudlift is built by Simpl developers to make it easier to launch dockerized
-services in AWS ECS.
+services in AWS ECS and Azure Container Apps.
 
 Cloudlift is a command-line tool for dockerized services to be deployed in AWS
-ECS. It's very simple to use. That's possible because this is heavily
-opinionated. Under the hood, it is a wrapper to AWS cloudformation templates. On
-creating/updating a service or a cluster this creates/updates a cloudformation
-in AWS.
+ECS or Azure Container Apps. It's very simple to use. That's possible because
+this is heavily opinionated. AWS remains the default provider for backward
+compatibility. Under the hood, AWS environments use CloudFormation/ECS/ECR and
+Azure environments use Azure-native resources such as Container Apps, Azure
+Container Registry, Key Vault, and App Configuration.
 
 ## Demo videos
 
@@ -48,6 +49,9 @@ pip install cloudlift
 
 ### 3. Configure AWS
 
+AWS is the default provider, so existing commands continue to target AWS unless
+an environment is created with `--provider azure`.
+
 ```perl
 aws configure
 ```
@@ -82,6 +86,13 @@ services to run in ECS.
 
 ```sh
 cloudlift create_environment -e <environment-name>
+```
+
+To create an Azure Container Apps environment instead, select the Azure provider
+when creating the environment:
+
+```sh
+cloudlift create_environment -e <environment-name> --provider azure
 ```
 
 This starts a prompt for required details to create an environment, which
@@ -268,6 +279,56 @@ plugin follow the [guide](https://docs.aws.amazon.com/systems-manager/latest/use
 
 MFA code can be passed as parameter `--mfa` or you will be prompted to enter
 the MFA code.
+
+## Azure Container Apps provider
+
+Azure support uses the same main Cloudlift workflow and command names:
+
+```sh
+cloudlift create_environment -e staging --provider azure
+cloudlift create_service -e staging
+cloudlift update_service -e staging
+cloudlift deploy_service -e staging
+```
+
+When an environment is created with `--provider azure`, Cloudlift records
+`provider: azure` in the environment configuration. Later commands read that
+stored provider and route through the Azure implementation instead of the AWS
+CloudFormation/ECS implementation.
+
+Azure users must already have an Azure subscription and an authenticated Azure
+identity available to the Azure SDK credential chain, for example by running:
+
+```sh
+az login
+az account set --subscription <subscription-id>
+```
+
+The identity needs permission to create and read the resource group, Container
+Apps managed environment, Log Analytics workspace, Azure Container Registry, Key
+Vault, and Azure App Configuration store used by the environment. By default the
+interactive setup prompts for or derives names such as:
+
+- resource group: `cloudlift-<environment>`
+- Container Apps managed environment: `cloudlift-<environment>-apps`
+- Log Analytics workspace: `cloudlift-<environment>-logs`
+- Azure Container Registry: `cloudlift<environment>acr`
+- Key Vault: `cloudlift-<environment>-kv`
+
+Azure environment configuration stores Azure metadata such as subscription ID,
+resource group, Azure location, Container Apps environment ID, ACR login server,
+Key Vault URI, App Configuration endpoint, and default Container Apps service
+settings. Runtime secrets should be stored in Key Vault and referenced from the
+Container App configuration; AWS Parameter Store and DynamoDB remain the AWS
+provider implementation.
+
+The first Azure Container Apps implementation supports the Cloudlift service
+fields that map cleanly to Container Apps: image, command, environment variables
+and secret references, CPU, memory, ingress, health check path, scaling, and
+tags. AWS-only fields such as EFS volumes, ECS/EC2 placement settings, SNS
+alarms, ALB listener priority, task-definition-only commands, `edit_config`,
+`get_version`, and `start_session` remain AWS-only until Azure support is added
+for those workflows.
 
 
 ## Example

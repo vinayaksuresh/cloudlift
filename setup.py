@@ -16,7 +16,7 @@ setup(
     version=VERSION,
     packages=find_packages(),
     install_requires=requirements,
-    description="Cloudlift makes it easier to launch dockerized services in AWS ECS",
+    description="Cloudlift makes it easier to launch dockerized services in AWS ECS and Azure Container Apps",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/GetSimpl/cloudlift",
